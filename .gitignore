@@ -1,0 +1,15 @@
+Set-Content -Path ".gitignore" -Value @"
+# Python environment
+venv/
+venv312/
+__pycache__/
+*.pyc
+
+# Log files
+bot.log
+
+# Secrets
+.env
+Config/.env
+firebase/serviceAccount.json
+"@
