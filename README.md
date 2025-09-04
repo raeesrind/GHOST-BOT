@@ -91,7 +91,7 @@ We welcome contributions! Please fork the repo, make your changes, and submit a 
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/raeesrind/GHOST-BOT/tree/main?tab=MIT-1-ov-file) for details.
 
 ## 🙏 Acknowledgements
 
