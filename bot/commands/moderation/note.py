@@ -3,7 +3,6 @@ from discord.ext import commands
 from datetime import datetime, timezone
 import uuid
 from firebase_admin import firestore
-
 from discord.ui import View, Select, Modal, TextInput
 
 db = firestore.client()
@@ -11,11 +10,13 @@ db = firestore.client()
 class Notes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.bot.add_view(AdminDeleteViewMulti([]))  # 🔁 Register persistent view on cog load
+        self.bot.add_view(AdminDeleteViewMulti([]))  # Persistent view
 
-    @commands.command(name="note")
+    @commands.command(name="note", help="📝 Add a note about a user. Anyone can use this.\n❌ Skips if command is disabled for the server.")
     async def note(self, ctx, member: discord.Member = None, *, note_text: str = None):
-        """Add a note about a member."""
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(str(ctx.guild.id), []):
+            return
+
         if member is None or note_text is None:
             embed = discord.Embed(
                 title="📝 How to Use `?note`",
@@ -38,16 +39,18 @@ class Notes(commands.Cog):
         db.collection("notes").document(note_id).set(note_data)
 
         embed = discord.Embed(
-            title="✅ Note Added",
+            title=":GhostSuccess: Note Added",
             description=f"Successfully added a note for {member.mention}",
             color=discord.Color.green()
         )
         embed.set_footer(text=f"By {ctx.author}", icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed)
 
-    @commands.command(name="notes")
+    @commands.command(name="notes", help="📬 View a member’s notes. Anyone can use this.\n❌ Skips if command is disabled for the server.")
     async def notes(self, ctx, member: discord.Member = None):
-        """View notes for a member (or yourself if none specified)."""
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(str(ctx.guild.id), []):
+            return
+
         member = member or ctx.author
 
         query = db.collection("notes") \
@@ -57,7 +60,7 @@ class Notes(commands.Cog):
         docs = list(query.stream())
         if not docs:
             embed = discord.Embed(
-                title="📭 No Notes Found",
+                title="📬 No Notes Found",
                 description=f"{member.mention} has no notes in this server.",
                 color=discord.Color.gold()
             )
@@ -72,12 +75,11 @@ class Notes(commands.Cog):
 
         for i, doc in enumerate(sorted_docs, start=1):
             note = doc.to_dict()
-            mod_id = note.get("mod_id", "Unknown")
             mod_tag = note.get("mod_tag", "Unknown")
 
-            if mod_tag == "Unknown" and mod_id != "Unknown":
+            if mod_tag == "Unknown":
                 try:
-                    user_obj = self.bot.get_user(int(mod_id)) or await self.bot.fetch_user(int(mod_id))
+                    user_obj = self.bot.get_user(int(note["mod_id"])) or await self.bot.fetch_user(int(note["mod_id"]))
                     mod_tag = str(user_obj)
                 except:
                     mod_tag = "Unknown"
@@ -100,12 +102,15 @@ class Notes(commands.Cog):
         else:
             await ctx.send(embed=embed)
 
-    @commands.command(name="editnote")
+    @commands.command(name="editnote", help="✏️ Edit a note. Mods/Admins only.\n❌ Skips if command is disabled for the server.")
     @commands.has_permissions(manage_messages=True)
     async def editnote(self, ctx, member: discord.Member = None):
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(str(ctx.guild.id), []):
+            return
+
         if not member:
             return await ctx.send(embed=discord.Embed(
-                title="❌ Missing Member",
+                title=":GhostError: Missing Member",
                 description="Please mention a user to edit their notes.\n\nUsage: `?editnote @user`",
                 color=discord.Color.red()
             ))
@@ -117,7 +122,7 @@ class Notes(commands.Cog):
 
         if not docs:
             return await ctx.send(embed=discord.Embed(
-                title="📭 No Notes Found",
+                title="📬 No Notes Found",
                 description=f"{member.mention} has no notes in this server.",
                 color=discord.Color.gold()
             ))
@@ -144,8 +149,7 @@ class EditNoteModal(discord.ui.Modal, title="Edit Note"):
         self.add_item(self.note_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        doc_ref = db.collection("notes").document(self.note_id)
-        doc_ref.update({
+        db.collection("notes").document(self.note_id).update({
             "note": self.note_input.value,
             "mod_id": str(interaction.user.id),
             "mod_tag": str(interaction.user),
@@ -153,7 +157,7 @@ class EditNoteModal(discord.ui.Modal, title="Edit Note"):
         })
 
         embed = discord.Embed(
-            title="✅ Note Updated",
+            title=":GhostSuccess: Note Updated",
             description=f"New note saved for <@{self.original_note['user_id']}>",
             color=discord.Color.green()
         )
@@ -185,21 +189,19 @@ class EditNoteDropdownView(View):
         super().__init__(timeout=60)
         self.add_item(NoteDropdownEdit(notes))
 
-class AdminDeleteViewMulti(discord.ui.View):
+class AdminDeleteViewMulti(View):
     def __init__(self, docs):
         super().__init__(timeout=None)
         self.docs = docs
 
     @discord.ui.button(label="🗑️ Delete Note", style=discord.ButtonStyle.danger, custom_id="delete_note_btn")
     async def delete_note(self, interaction: discord.Interaction, button: discord.ui.Button):
-        print("🧪 Delete button pressed!")
-
         if not (
             interaction.user.guild_permissions.administrator or
             interaction.user.guild_permissions.manage_messages
         ):
             embed = discord.Embed(
-                title="⛔ Permission Denied",
+                title=":GhostError: Permission Denied",
                 description="You don't have permission to delete this note.",
                 color=discord.Color.red()
             )
@@ -210,13 +212,10 @@ class AdminDeleteViewMulti(discord.ui.View):
         options = []
         for i, doc in enumerate(self.docs, start=1):
             note = doc.to_dict()
-            note_id = note["note_id"]
-            note_preview = note["note"][:80]
-            mod_tag = note.get("mod_tag", "Unknown")
             options.append(discord.SelectOption(
-                label=f"{i}. {note_preview}",
-                description=f"By {mod_tag}",
-                value=note_id
+                label=f"{i}. {note['note'][:80]}",
+                description=f"By {note.get('mod_tag', 'Unknown')}",
+                value=note["note_id"]
             ))
 
         view = NoteDropdownDeleteView(options)
@@ -230,7 +229,7 @@ class AdminDeleteViewMulti(discord.ui.View):
             ephemeral=True
         )
 
-class NoteDropdownDeleteView(discord.ui.View):
+class NoteDropdownDeleteView(View):
     def __init__(self, options):
         super().__init__(timeout=60)
         self.add_item(NoteDropdownDelete(options))
@@ -248,8 +247,8 @@ class NoteDropdownDelete(discord.ui.Select):
         note_id = self.values[0]
         db.collection("notes").document(note_id).delete()
         embed = discord.Embed(
-            title="✅ Note Deleted",
-            description=f"The selected note has been removed successfully.",
+            title=":GhostSuccess: Note Deleted",
+            description="The selected note has been removed successfully.",
             color=discord.Color.green()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)

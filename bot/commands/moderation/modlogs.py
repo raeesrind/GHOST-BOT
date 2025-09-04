@@ -9,12 +9,26 @@ class ModLogs(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="modlogs")
-    @commands.has_permissions(manage_messages=True)
+    @commands.command(
+        name="modlogs",
+        help="View moderation logs for a user by mention, username, or ID.\n\n"
+             "❌ Skips if command is disabled for the server."
+    )
     async def modlogs(self, ctx, *, user: str = None):
+        # ❌ Skip if command is disabled
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(str(ctx.guild.id), []):
+            return
+
+        # ✅ Permissions check: mod / admin / owner
+        is_mod = ctx.author.guild_permissions.manage_messages
+        is_admin = ctx.author.guild_permissions.administrator
+        is_owner = await self.bot.is_owner(ctx.author)
+        if not (is_mod or is_admin or is_owner):
+            return await ctx.message.add_reaction("⛔")
+
         if not user:
             return await ctx.send(embed=discord.Embed(
-                title="❌ Missing User",
+                title=":GhostError: Missing User",
                 description="Please mention a user or provide their username or ID.\n\n**Usage:** `?modlogs @user [page]`",
                 color=discord.Color.red()
             ))
@@ -31,7 +45,7 @@ class ModLogs(commands.Cog):
 
         if not member:
             return await ctx.send(embed=discord.Embed(
-                title="❌ User Not Found",
+                title=":GhostError: User Not Found",
                 description=(
                     f"Could not find any member matching `{user}`.\n\n"
                     "Please try again using:\n"
@@ -52,10 +66,10 @@ class ModLogs(commands.Cog):
             logs = [doc.to_dict() for doc in docs if str(doc.to_dict().get("user_id")) == user_id]
             logs.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
         except Exception as e:
-            return await ctx.send(f"❌ Failed to fetch logs: `{e}`")
+            return await ctx.send(f":GhostError: Failed to fetch logs: `{e}`")
 
         if not logs:
-            return await ctx.send(f"✅ No moderation logs found for {member.mention}.")
+            return await ctx.send(f":GhostSuccess: No moderation logs found for {member.mention}.")
 
         logs_per_page = 10
         total_pages = (len(logs) + logs_per_page - 1) // logs_per_page
@@ -68,7 +82,7 @@ class ModLogs(commands.Cog):
                 page = 1
 
         if page > total_pages:
-            return await ctx.send(f"❌ Page {page} doesn't exist. {member.mention} has only {total_pages} page(s).")
+            return await ctx.send(f":GhostError: Page {page} doesn't exist. {member.mention} has only {total_pages} page(s).")
 
         page = max(1, page)
         start = (page - 1) * logs_per_page

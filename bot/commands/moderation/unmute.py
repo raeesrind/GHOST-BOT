@@ -10,7 +10,11 @@ class Unmute(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="unmute")
+    @commands.command(
+        name="unmute",
+        help="Unmute a member by removing timeout and muted role.\n\n**Usage:** `?unmute @user [reason]`\n**Example:** `?unmute @User Apologized`",
+        brief="Unmute a member in the server."
+    )
     @commands.has_permissions(manage_roles=True)
     async def unmute(self, ctx, member: discord.Member = None, *, reason: str = None):
         await ctx.message.delete()
@@ -23,11 +27,11 @@ class Unmute(commands.Cog):
             return await ctx.send(embed=discord.Embed(description=usage, color=discord.Color.purple()))
 
         if member == ctx.author:
-            return await ctx.send("❌ You can't unmute yourself.")
+            return await ctx.send(":GhostError: You can't unmute yourself.")
         if member.bot:
-            return await ctx.send("❌ You can't unmute bots.")
+            return await ctx.send(":GhostError: You can't unmute bots.")
         if ctx.guild.owner_id == member.id:
-            return await ctx.send("❌ You can't unmute the server owner.")
+            return await ctx.send(":GhostError: You can't unmute the server owner.")
 
         guild_id = str(ctx.guild.id)
         reason = reason or "No reason provided"
@@ -72,10 +76,10 @@ class Unmute(commands.Cog):
             response_embed.add_field(name="Reason", value=reason, inline=False)
             await ctx.send(embed=response_embed)
 
-            # ✅ Step 5: Log to Firestore with correct case field
+            # :GhostSuccess: Step 5: Log to Firestore with correct case field
             case_number = await get_next_case_number(guild_id)
             db.collection("moderation").document(guild_id).collection("logs").document().set({
-                "case": case_number,  # ✅ Fixed field name
+                "case": case_number,
                 "user_id": member.id,
                 "user_tag": str(member),
                 "moderator_id": ctx.author.id,
@@ -87,7 +91,7 @@ class Unmute(commands.Cog):
             })
 
         except Exception as e:
-            await ctx.send(f"❌ Unmute failed: {e}")
+            await ctx.send(f":GhostError: Unmute failed: {e}")
 
 async def setup(bot):
     await bot.add_cog(Unmute(bot))

@@ -10,7 +10,11 @@ class Warnings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="warnings")
+    @commands.command(
+        name="warnings",
+        help="View all warnings issued to a member.\n\n**Usage:** `?warnings @user`\n**Example:** `?warnings @User`",
+        brief="View a user's warnings"
+    )
     @commands.has_permissions(manage_messages=True)
     async def warnings(self, ctx, member: discord.Member = None):
         if member is None:
@@ -29,7 +33,7 @@ class Warnings(commands.Cog):
 
             if not doc.exists or "warnings" not in doc.to_dict() or len(doc.to_dict()["warnings"]) == 0:
                 embed = discord.Embed(
-                    description=f"✅ **{member.mention} has no warnings.**",
+                    description=f":GhostSuccess: **{member.mention} has no warnings.**",
                     color=discord.Color.green()
                 )
                 return await ctx.send(embed=embed)
@@ -54,7 +58,7 @@ class Warnings(commands.Cog):
             await ctx.send(embed=embed)
 
         except Exception as e:
-            await ctx.send(f"❌ Error retrieving warnings: `{e}`")
+            await ctx.send(f":GhostError: Error retrieving warnings: `{e}`")
 
 async def setup(bot):
     await bot.add_cog(Warnings(bot))

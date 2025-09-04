@@ -1,9 +1,12 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 from firebase_admin import firestore
-from datetime import timedelta
 from discord.utils import utcnow
-from bot.utils.casecounter import get_next_case_number  # ✅ Added import
+from bot.utils.taskmanager import task_manager
+from bot.utils.casecounter import get_next_case_number
+import asyncio
+import traceback
 
 db = firestore.client()
 
@@ -13,114 +16,116 @@ class Mute(commands.Cog):
 
     def parse_duration(self, s):
         try:
-            unit = s[-1].lower()
+            s = s.lower()
+            if s.isdigit():
+                return int(s) * 60
+            unit = s[-1]
             value = int(s[:-1])
-            if unit == 's':
-                return value
-            elif unit == 'm':
-                return value * 60
-            elif unit == 'h':
-                return value * 3600
-            elif unit == 'd':
-                return value * 86400
+            return value * {"s": 1, "m": 60, "h": 3600, "d": 86400}.get(unit, 0)
         except:
             return None
 
-    async def resolve_member(self, ctx, arg):
-        # Try mention or ID
+    async def get_or_create_muted_role(self, ctx):
+        role = discord.utils.get(ctx.guild.roles, name="Muted")
+        if role:
+            return role
         try:
-            member = await commands.MemberConverter().convert(ctx, arg)
-            return member
-        except:
-            pass
+            role = await ctx.guild.create_role(name="Muted", reason="Mute role for muting users")
+            for channel in ctx.guild.channels:
+                await channel.set_permissions(role, send_messages=False, speak=False, add_reactions=False)
+            return role
+        except Exception as e:
+            await ctx.send(f"❌ Failed to create Muted role: `{e}`")
+            return None
 
-        # Try to find by username
-        for member in ctx.guild.members:
-            if member.name.lower() == arg.lower() or f"{member.name}#{member.discriminator}" == arg:
-                return member
-
-        return None
-
-    @commands.command(name="mute")
-    @commands.has_permissions(manage_messages=True)
+    @commands.hybrid_command(name="mute", help="Mute a user with optional duration and reason.")
+    @app_commands.describe(
+        target="User or ID to mute",
+        duration="Duration (e.g. 10m, 2h, 1d)",
+        reason="Reason for the mute"
+    )
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def mute(self, ctx, member_arg: str = None, maybe_duration: str = None, *, rest: str = None):
-        await ctx.message.delete()
-        if not member_arg:
+    async def mute(self, ctx, target: str = None, duration: str = None, *, reason: str = None):
+        guild_id = str(ctx.guild.id)
+
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(guild_id, []):
+            return
+
+        config_ref = db.collection("server_config").document(guild_id)
+        config_data = config_ref.get().to_dict() or {}
+        allowed_roles = [r.lower() for r in config_data.get("mute_roles", ["admin", "moderator", "senior mod"])]
+        has_allowed_role = any(role.name.lower() in allowed_roles for role in ctx.author.roles)
+        perms = ctx.author.guild_permissions
+        has_permission = perms.manage_messages or perms.administrator
+
+        if not (has_allowed_role or has_permission):
+            return await ctx.send("🚫 You don't have permission to use this command.")
+
+        if not target:
             embed = discord.Embed(
-                title="Mute Command Help",
-                description="**Command:** ?mute\n"
-                            "**Description:** Mute a member so they cannot type.\n"
-                            "**Cooldown:** 3 seconds\n\n"
-                            "**Usage:**\n"
-                            "?mute [user] [limit] [reason]\n\n"
+                title=":GhostError: Mute Command Help",
+                description="**Usage:**\n"
+                            "`?mute [user/@mention/user_id] [limit] [reason]`\n\n"
                             "**Examples:**\n"
-                            "?mute @User 10m spamming\n"
-                            "?mute 1234567890 being rude\n"
-                            "?mute username#1234 5h excessive pinging\n"
-                            "?mute @User spamming (perm mute)",
+                            "`?mute @User 10m spamming`\n"
+                            "`?mute 1234567890 2d rule violation`\n"
+                            "`?mute @User being rude` (permanent)",
                 color=discord.Color.purple()
             )
             return await ctx.send(embed=embed)
 
-        member = await self.resolve_member(ctx, member_arg)
+        if ctx.message:
+            try:
+                await ctx.message.delete()
+            except:
+                pass
+
+        member = None
+        try:
+            member = await commands.MemberConverter().convert(ctx, target)
+        except:
+            member = None
 
         if not member:
-            embed = discord.Embed(
-                title="❌ User Not Found",
-                description="I couldn't find that user in this server.",
-                color=discord.Color.red()
-            )
-            await ctx.send(embed=embed)
-            return await ctx.send("❌ User not found or not in the server.")  # ✅ PRESERVED
-
-        if member.guild_permissions.manage_messages or member.guild_permissions.administrator:
-            embed = discord.Embed(
-                description="❌ That user is protected, I can't do that.",
-                color=discord.Color.red()
-            )
+            embed = discord.Embed(description=":GhostError: Invalid user or ID.", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
-        if member == ctx.author:
-            return await ctx.send("❌ You can't mute yourself.")
-        if member.bot:
-            return await ctx.send("❌ You can't mute bots.")
-        if ctx.guild.owner_id == member.id:
-            return await ctx.send("❌ You can't mute the server owner.")
+        if member == ctx.author or member.bot or ctx.guild.owner_id == member.id:
+            return await ctx.send(embed=discord.Embed(description=":GhostError: Invalid mute target.", color=discord.Color.red()))
+        if member.guild_permissions.administrator or member.guild_permissions.manage_messages:
+            return await ctx.send(embed=discord.Embed(description=":GhostError: That user is protected.", color=discord.Color.red()))
 
-        duration_seconds = self.parse_duration(maybe_duration)
+        duration_seconds = self.parse_duration(duration) if duration else None
+        final_reason = (reason or "No reason provided") if duration_seconds else f"{duration or ''} {reason or ''}".strip()
+        duration_label = duration if duration_seconds else "permanent"
 
-        if duration_seconds is None:
-            reason = f"{maybe_duration or ''} {rest or ''}".strip()
-            until = None
-            duration_label = "permanent"
-        else:
-            reason = rest or "No reason provided"
-            until = utcnow() + timedelta(seconds=duration_seconds)
-            duration_label = maybe_duration
+        muted_role = await self.get_or_create_muted_role(ctx)
+        if not muted_role:
+            return
 
         try:
-            await member.timeout(until, reason=reason)
+            await member.add_roles(muted_role, reason=final_reason)
         except Exception as e:
-            return await ctx.send(f"❌ Failed to mute: {e}")
+            embed = discord.Embed(description=f":GhostError: Failed to add Muted role: `{e}`", color=discord.Color.red())
+            return await ctx.send(embed=embed)
 
         try:
             await member.send(
-                f"You were muted in **{ctx.guild.name}** for **{reason}**\n"
-                f"Duration: **{duration_label}**"
+                f"🔇 You were muted in **{ctx.guild.name}**.\n"
+                f"**Reason:** {final_reason}\n"
+                f"**Duration:** {duration_label}"
             )
-        except discord.Forbidden:
+        except:
             pass
 
-        embed = discord.Embed(
-            description=f"✅ *{member.name} was muted.* | {reason}",
+        await ctx.send(embed=discord.Embed(
+            description=f":GhostSuccess: **{member.name}** was muted.\n**Reason:** {final_reason}",
             color=discord.Color.blue()
-        )
-        await ctx.send(embed=embed)
+        ))
 
         try:
             logs_ref = db.collection("moderation") \
-                         .document(str(ctx.guild.id)) \
+                         .document(guild_id) \
                          .collection("logs") \
                          .document()
 
@@ -132,13 +137,43 @@ class Mute(commands.Cog):
                 "user_tag": str(member),
                 "moderator_id": ctx.author.id,
                 "moderator_tag": str(ctx.author),
-                "reason": reason,
+                "reason": final_reason,
                 "action": "mute",
                 "duration": duration_label,
                 "timestamp": int(utcnow().timestamp())
             })
+
+            if duration_seconds:
+                async def unmute_later():
+                    await asyncio.sleep(duration_seconds)
+                    try:
+                        await member.remove_roles(muted_role, reason="Temporary mute expired.")
+                        try:
+                            await member.send(f"🔊 You have been unmuted in **{ctx.guild.name}**.")
+                        except:
+                            pass
+                    except Exception as e:
+                        print(f"[AutoUnmute Fail] Case #{case_number} → {e}")
+
+                task_manager.schedule(case_number, unmute_later())
+
         except Exception as e:
-            await ctx.send(f"❌ Firestore error: {e}")
+            embed = discord.Embed(description=f":GhostError: Firestore error: `{e}`", color=discord.Color.red())
+            await ctx.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx, error):
+        # Silently ignore unknown commands
+        if isinstance(error, commands.CommandNotFound):
+            return
+
+        # Only handle errors that occurred in this cog
+        if ctx.command and ctx.command.cog_name != self.__class__.__name__:
+            return
+
+        # Optional: You can still print error to console (or remove this)
+        print(f"Ignored Error: {type(error).__name__}: {error}")
+
 
 async def setup(bot):
     await bot.add_cog(Mute(bot))

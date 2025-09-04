@@ -1,12 +1,13 @@
 from discord.ext import commands
+import discord 
 
-class Hello(commands.Cog):
+class hello(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command()
     async def hello(self, ctx):
-        await ctx.send(f"👋 Hello, {ctx.author.display_name}!")
+        await ctx.send(f"👋🏻 hello jaan,{ctx.author.display_name}!")
 
 async def setup(bot):
-    await bot.add_cog(Hello(bot))
+    await bot.add_cog(hello(bot))

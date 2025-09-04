@@ -12,34 +12,43 @@ class EditWarn(commands.Cog):
     @commands.command(name="editwarn")
     @commands.has_permissions(manage_messages=True)
     async def editwarn(self, ctx, member: discord.Member = None, warn_number: int = None, *, new_reason: str = None):
+        guild_id = str(ctx.guild.id)
+
+        # 🔒 Silent ignore if command is disabled or unauthorized
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(guild_id, []):
+            return
+        if not ctx.author.guild_permissions.manage_messages:
+            return
+
         if not member or not warn_number or not new_reason:
             embed = discord.Embed(
                 title="✏️ Edit Warning",
                 description="Edit a user's previous warning reason.\n\n"
-                            "**Usage:**\n"
-                            "`?editwarn @user <warn_number> <new_reason>`\n\n"
-                            "**Example:**\n"
-                            "`?editwarn @nakibingariya 2 Apologized and promised to follow rules`",
+                            "**Usage:** `?editwarn @user <warn_number> <new_reason>`\n"
+                            "**Example:** `?editwarn @User 2 Apologized and promised to follow rules`",
                 color=discord.Color.orange()
             )
-            await ctx.send(embed=embed)
-            return
+            return await ctx.send(embed=embed)
 
-        guild_id = str(ctx.guild.id)
         user_id = str(member.id)
         warnings_ref = db.collection("infractions").document(guild_id).collection("users").document(user_id)
 
         try:
             doc = warnings_ref.get()
             if not doc.exists or "warnings" not in doc.to_dict():
-                return await ctx.send(f"⚠️ No warnings found for {member.mention}.")
+                return await ctx.send(embed=discord.Embed(
+                    description=f":GhostError: No warnings found for {member.mention}.",
+                    color=discord.Color.gold()
+                ))
 
             warnings = doc.to_dict()["warnings"]
-
-            index = warn_number - 1  # 1-based indexing
+            index = warn_number - 1
 
             if index < 0 or index >= len(warnings):
-                return await ctx.send(f"❌ Warning #{warn_number} does not exist for {member.mention}.")
+                return await ctx.send(embed=discord.Embed(
+                    description=f":GhostError: Warning #{warn_number} does not exist for {member.mention}.",
+                    color=discord.Color.red()
+                ))
 
             old_reason = warnings[index]["reason"]
             warnings[index]["reason"] = new_reason
@@ -67,7 +76,10 @@ class EditWarn(commands.Cog):
                 pass
 
         except Exception as e:
-            await ctx.send(f"❌ Firestore error: {e}")
+            await ctx.send(embed=discord.Embed(
+                description=f":GhostError: Firestore error: `{e}`",
+                color=discord.Color.red()
+            ))
 
 async def setup(bot):
     await bot.add_cog(EditWarn(bot))

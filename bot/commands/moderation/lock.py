@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import asyncio
 import re
 
@@ -15,53 +15,49 @@ class ChannelModeration(commands.Cog):
         multiplier = {"s": 1, "m": 60, "h": 3600}
         return int(value) * multiplier[unit]
 
-    @commands.command(name="lock")
+    @commands.command(name="lock", help="Lock a channel optionally for a time.\n\n**Usage:** `?lock [channel] [duration] [reason]`\n**Example:** `?lock #general 10m Spamming`")
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def lock(self, ctx, channel: discord.TextChannel = None, time: str = None, *, reason: str = "No reason provided"):
-        """Lock a channel with optional time auto-unlock."""
+        guild_id = str(ctx.guild.id)
 
-        # Check permission
-        is_admin = ctx.author.guild_permissions.administrator
-        is_owner = await self.bot.is_owner(ctx.author)
-        if not (is_admin or is_owner):
+        # 🔒 Skip if command is disabled
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(guild_id, []):
+            return
+
+        # ✅ Permission check
+        if not (ctx.author.guild_permissions.administrator or await self.bot.is_owner(ctx.author)):
             embed = discord.Embed(
-                title="⛔ Access Denied",
-                description="You must be a server administrator or the bot owner to use this command.",
+                title=":GhostError: Access Denied",
+                description="You must be an administrator or the bot owner to use this command.",
                 color=discord.Color.red()
             )
             return await ctx.send(embed=embed)
 
-        # If no channel given, use current one
+        # 📍 Use current channel if none specified
         if channel is None:
             channel = ctx.channel
-            # If only ?lock used → show help
             if time is None:
                 embed = discord.Embed(
                     title="🔒 Command: ?lock",
                     description=(
-                        "**Description:** Lock a channel (optionally for a time)\n"
-                        "**Cooldown:** 3 seconds\n\n"
-                        "**Usage:**\n"
-                        "`?lock [channel] (time) (reason)`\n"
-                        "**Example:**\n"
-                        "`?lock #general 10m Spamming`\n"
-                        "`?lock 5m Breaking rules`"
+                        "**Description:** Lock a channel (optionally with a timer).\n"
+                        "**Usage:** `?lock [channel] [time] [reason]`\n"
+                        "**Examples:**\n"
+                        "`?lock #chat 5m Spamming`\n"
+                        "`?lock 10m Rule violation`\n"
+                        "`?lock #general`"
                     ),
                     color=discord.Color.orange()
                 )
                 return await ctx.send(embed=embed)
 
-        # Check if time is valid
-        duration_seconds = None
-        if time:
-            duration_seconds = self.parse_time(time)
-            if duration_seconds:
-                reason = reason or "No reason provided"
-            else:
-                # Shift `time` into `reason` if not valid time
-                reason = f"{time} {reason}".strip()
-                duration_seconds = None
+        # ⏳ Check if valid time
+        duration_seconds = self.parse_time(time) if time else None
+        if time and not duration_seconds:
+            reason = f"{time} {reason}".strip()  # Treat time as part of reason
+            duration_seconds = None
 
-        # Lock the channel
+        # 🔐 Lock channel
         try:
             overwrite = channel.overwrites_for(ctx.guild.default_role)
             overwrite.send_messages = False
@@ -73,31 +69,32 @@ class ChannelModeration(commands.Cog):
                 color=discord.Color.red()
             )
             embed.add_field(name="Reason", value=reason, inline=False)
-
             if duration_seconds:
-                embed.add_field(name="Auto-Unlock", value=f"In {time}", inline=False)
-
+                embed.add_field(name="Auto-Unlock", value=f"In `{time}`", inline=False)
             embed.set_footer(text=f"Locked by {ctx.author}", icon_url=ctx.author.display_avatar.url)
             await ctx.send(embed=embed)
 
-            # Schedule unlock if timed
+            # 🕒 Schedule unlock
             if duration_seconds:
                 await asyncio.sleep(duration_seconds)
-                overwrite.send_messages = None  # Reset to default
+                overwrite.send_messages = None  # Reset permission
                 await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason="Auto-unlock")
+
                 unlock_embed = discord.Embed(
                     title="🔓 Channel Unlocked",
-                    description=f"{channel.mention} has been auto-unlocked after {time}.",
+                    description=f"{channel.mention} has been auto-unlocked after `{time}`.",
                     color=discord.Color.green()
                 )
                 await ctx.send(embed=unlock_embed)
 
         except discord.Forbidden:
             await ctx.send(embed=discord.Embed(
-                title="⛔ Permission Error",
-                description="I don't have permission to lock this channel.",
+                title=":GhostError: Missing Permissions",
+                description="I don’t have permission to lock this channel.",
                 color=discord.Color.red()
             ))
+        except Exception as e:
+            await ctx.send(f":GhostError: `{e}`")
 
 async def setup(bot):
     await bot.add_cog(ChannelModeration(bot))

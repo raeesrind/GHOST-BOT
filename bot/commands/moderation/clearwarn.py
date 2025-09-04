@@ -9,9 +9,22 @@ class ClearWarn(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="clearwarn")
+    @commands.command(
+        name="clearwarn",
+        help="Clear all warnings for a member.\n\n**Usage:** `?clearwarn @user`"
+    )
     @commands.has_permissions(manage_messages=True)
     async def clearwarn(self, ctx, member: discord.Member = None):
+        guild_id = str(ctx.guild.id)
+
+        # 🔒 Block if command is disabled
+        if ctx.command.name.lower() in self.bot.disabled_commands.get(guild_id, []):
+            return
+
+        # 🔒 Silent block if member lacks permission (added for extra protection)
+        if not ctx.author.guild_permissions.manage_messages:
+            return
+
         if member is None:
             usage = (
                 "**Usage:** `?clearwarn @user`\n"
@@ -20,7 +33,6 @@ class ClearWarn(commands.Cog):
             )
             return await ctx.send(embed=discord.Embed(description=usage, color=discord.Color.red()))
 
-        guild_id = str(ctx.guild.id)
         user_id = str(member.id)
         warnings_ref = db.collection("infractions").document(guild_id).collection("users").document(user_id)
 
@@ -28,7 +40,7 @@ class ClearWarn(commands.Cog):
             doc = warnings_ref.get()
             if not doc.exists or not doc.to_dict().get("warnings"):
                 return await ctx.send(embed=discord.Embed(
-                    description=f"⚠️ **{member.mention} has no warnings to clear.**",
+                    description=f":GhostError: **{member.mention} has no warnings to clear.**",
                     color=discord.Color.orange()
                 ))
 
@@ -37,7 +49,7 @@ class ClearWarn(commands.Cog):
 
             # Confirmation embed
             embed = discord.Embed(
-                description=f"✅ **All warnings for {member.mention} have been cleared.**",
+                description=f":GhostSuccess: **All warnings for {member.mention} have been cleared.**",
                 color=discord.Color.green()
             )
             await ctx.send(embed=embed)
@@ -55,7 +67,7 @@ class ClearWarn(commands.Cog):
             })
 
         except Exception as e:
-            await ctx.send(f"❌ Firestore error: {e}")
+            await ctx.send(f":GhostError: Firestore error: {e}")
 
 async def setup(bot):
     await bot.add_cog(ClearWarn(bot))

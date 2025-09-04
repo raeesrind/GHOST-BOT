@@ -5,7 +5,11 @@ class UnlockChannel(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="unlock")
+    @commands.command(
+        name="unlock",
+        help="Unlocks a text channel for @everyone.",
+        brief="Unlock a locked text channel."
+    )
     async def unlock(self, ctx, channel: discord.TextChannel = None, *, reason: str = "No reason provided"):
         """Unlock a text channel."""
 
@@ -14,7 +18,7 @@ class UnlockChannel(commands.Cog):
         is_owner = await self.bot.is_owner(ctx.author)
         if not (is_admin or is_owner):
             embed = discord.Embed(
-                title="⛔ Access Denied",
+                title=":GhostError: Access Denied",
                 description="You must be a server administrator or the bot owner to use this command.",
                 color=discord.Color.red()
             )
@@ -46,7 +50,7 @@ class UnlockChannel(commands.Cog):
             await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=reason)
 
             embed = discord.Embed(
-                title="🔓 Channel Unlocked",
+                title=":GhostSuccess: Channel Unlocked",
                 description=f"{channel.mention} has been unlocked.",
                 color=discord.Color.green()
             )
@@ -56,7 +60,7 @@ class UnlockChannel(commands.Cog):
 
         except discord.Forbidden:
             await ctx.send(embed=discord.Embed(
-                title="⛔ Permission Error",
+                title=":GhostError: Permission Error",
                 description="I don't have permission to unlock this channel.",
                 color=discord.Color.red()
             ))

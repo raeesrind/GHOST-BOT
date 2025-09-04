@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from firebase_admin import firestore
 from discord.utils import utcnow
-from bot.utils.casecounter import get_next_case_number  # ✅ Added import
+from bot.utils.casecounter import get_next_case_number  # :GhostSuccess: Added import
 
 db = firestore.client()
 
@@ -10,7 +10,11 @@ class Unban(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="unban")
+    @commands.command(
+        name="unban",
+        help="Unban a user by their ID and log the action.",
+        brief="Unban a user and log it to modlogs."
+    )
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx, user_id: int = None, *, reason: str = None):
         await ctx.message.delete()
@@ -27,7 +31,7 @@ class Unban(commands.Cog):
         try:
             user = await self.bot.fetch_user(user_id)
 
-            # ✅ Async-safe way to check if user is banned
+            # :GhostSuccess: Async-safe way to check if user is banned
             banned_user = None
             async for ban_entry in ctx.guild.bans(limit=None):
                 if ban_entry.user.id == user.id:
@@ -35,7 +39,7 @@ class Unban(commands.Cog):
                     break
 
             if banned_user is None:
-                return await ctx.send("❌ That user is not banned.")
+                return await ctx.send(":GhostError: That user is not banned.")
 
             await ctx.guild.unban(user, reason=reason)
 
@@ -45,7 +49,7 @@ class Unban(commands.Cog):
             except discord.Forbidden:
                 pass
 
-            # ✅ Confirmation message
+            # :GhostSuccess: Confirmation message
             embed = discord.Embed(
                 description=f"🔓 *{user} was unbanned.*",
                 color=discord.Color.green()
@@ -62,7 +66,7 @@ class Unban(commands.Cog):
               .collection("logs") \
               .document(str(case_number)) \
               .set({
-                  "case": case_number,  # ✅ Changed from case_number to case for consistency
+                  "case": case_number,  # :GhostSuccess: Changed from case_number to case for consistency
                   "user_id": user.id,
                   "user_tag": str(user),
                   "moderator_id": ctx.author.id,
@@ -74,11 +78,11 @@ class Unban(commands.Cog):
               })
 
         except discord.NotFound:
-            await ctx.send("❌ User not found.")
+            await ctx.send(":GhostError: User not found.")
         except discord.Forbidden:
-            await ctx.send("❌ I don't have permission to unban this user.")
+            await ctx.send(":GhostError: I don't have permission to unban this user.")
         except Exception as e:
-            await ctx.send(f"❌ Unban failed: {e}")
+            await ctx.send(f":GhostError: Unban failed: {e}")
 
 async def setup(bot):
     await bot.add_cog(Unban(bot))
