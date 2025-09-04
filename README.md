@@ -1,7 +1,7 @@
 # GHOST Bot – Premium Discord Leveling & Moderation for Free
 
-![GitHub stars](https://img.shields.io/github/stars/username/repo.svg)
-![GitHub issues](https://img.shields.io/github/issues/username/repo.svg)
+![GitHub stars](https://img.shields.io/github/stars/raeesrind/GHOST-BOT.svg)
+![GitHub issues](https://img.shields.io/github/issues/raeesrind/GHOST-BOT.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ## Overview
