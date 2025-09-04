@@ -2,7 +2,7 @@
 
 ![GitHub stars](https://img.shields.io/github/stars/raeesrind/GHOST-BOT.svg)
 ![GitHub issues](https://img.shields.io/github/issues/raeesrind/GHOST-BOT.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/github/license/raeesrind/GHOST-BOT)
 
 ## Overview
 
