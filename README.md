@@ -77,10 +77,6 @@ GHOST Bot is a professional-grade Discord bot designed to enhance your server wi
 
 For a full list, use `?help` in Discord.
 
-## 📸 Screenshots/GIFs
-
-*Add screenshots or GIFs of the bot in action here.*
-
 ## 🎥 Demo Video
 
 [Watch the demo on YouTube](https://www.youtube.com/watch?v=placeholder)
