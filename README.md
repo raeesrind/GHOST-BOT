@@ -79,7 +79,7 @@ For a full list, use `?help` in Discord.
 
 ## 🎥 Demo Video
 
-[Watch the demo on YouTube](https://www.youtube.com/watch?v=placeholder)
+[Watch the demo on YouTube](https://youtube.com/shorts/GW4mc7jm0Hc?si=v9LA-apTgpHrPfBN)
 
 ## 🤝 Contributing
 
